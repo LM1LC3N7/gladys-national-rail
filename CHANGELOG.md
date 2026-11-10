@@ -10,6 +10,8 @@ the notes of the version's GitHub Release.
 
 ## [Unreleased]
 
+## [0.1.1] - 2026-11-10
+
 ### Added
 
 - First version: live departures of British trains from National Rail Darwin, through the Live Departure
@@ -29,3 +31,6 @@ the notes of the version's GitHub Release.
 - Review r2: the test button waits for a read in flight instead of telling a failure, forgets the result of
   the old key; “No recent data” also during a 429 pause or with a refused key; an old copy of a board told
   as such.
+
+[Unreleased]: https://github.com/LM1LC3N7/gladys-national-rail/compare/v0.1.1...HEAD
+[0.1.1]: https://github.com/LM1LC3N7/gladys-national-rail/releases/tag/v0.1.1

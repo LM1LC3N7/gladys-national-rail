@@ -1,6 +1,6 @@
 {
   "name": "gladys-national-rail",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "private": true,
   "description": "Gladys Assistant external integration for the live departures of British trains (National Rail Darwin, through the Rail Data Marketplace). Unofficial, not affiliated with National Rail.",
   "type": "module",
