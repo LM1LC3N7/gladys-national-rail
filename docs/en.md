@@ -36,7 +36,7 @@ Example: `PAD, RDG>PAD:Train to work`.
 
 Save, then open the **Discover** tab and add the boards. Only the boards added as devices are read on their own. The
 **Test the connection** button reads the first board (at most once every 30 s; a board read less than an
-interval ago is answered from that read).
+interval ago is answered from that read, failed or not).
 
 ## Devices
 
@@ -53,8 +53,10 @@ And for the whole board:
 - **Disruption messages**: the National Rail messages of the station, without their HTML.
 
 A cancelled train, or a train Darwin only calls “Delayed” without a time, gets no countdown: it is told in the
-departure board text, never given a made-up time. Times are UK times (GMT in winter, BST in summer), changes of
-time and midnight included. No feature keeps a history.
+departure board text, never given a made-up time. Replacement buses are not shown: Darwin lists them
+apart, and this version reads the trains only. Times are UK times (GMT in winter, BST in summer), changes of
+time and midnight included (in the hour repeated in October, the reading nearest to the board is taken).
+The countdowns count from the time the board was served (the `Date` of the answer). No feature keeps a history.
 
 ## Scenes
 
@@ -83,10 +85,17 @@ are sent, the rest at the next reads.
   6 h; the pause is kept in `/data`.
 - **One board failing** (server error, no answer within 10 s, unknown station code): it is read again later
   and later (the interval doubling, up to 1 h); the other boards go on.
-- Answers larger than 1 MB are cut before they are read, and a board generated more than 15 min before it was
+- Answers larger than 1 MB are cut before they are read, and a board generated more than 5 min before it was
   served is not used.
+- Darwin without train information for the station (`areServicesAvailable: false`): nothing is published, the
+  status says so with the National Rail message; never “no train”.
+- After 15 min without a good read of a board, its texts say “No recent data” (Gladys cannot unpublish a
+  countdown: its date in Gladys tells its age).
+- A 404 of the gateway itself (not of a station) says the API address may be out of date.
+- Saving a new key reads at once the boards that failed with the old one.
 - `/data` unreadable: never written over; the integration reads it again every 10 s and, within 30 s, goes on
-  with the pauses and the refusal in memory (the status says so).
+  with the pauses and the refusal in memory (the status says so). `/data` that cannot be written is told in
+  the status too (the pace is then not kept across a restart).
 
 ## Privacy
 

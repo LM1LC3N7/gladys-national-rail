@@ -19,3 +19,10 @@ the notes of the version's GitHub Release.
 - Scene triggers “Train delayed” and “Train cancelled”, scene action “Read the next trains”, “Test the
   connection” button.
 - Pace kept across restarts, 429 pauses, refused key and fired events kept in `/data`.
+
+### Fixed
+
+- Review r1: the hour repeated in October, `areServicesAvailable: false` (unknown, never “no train”), the
+  countdown counted from the time the board was served, the test button within the interval, a new key
+  reading the failed boards at once, “No recent data” after 15 min, unreadable messages, `/data` not
+  writable and an out-of-date API address told.

@@ -8,9 +8,10 @@
 //   - 200 + a readable board              -> the board;
 //   - 401/403 + the fault of the gateway  -> 'refused' (the key, or its
 //     subscription to the product): no automatic retry;
-//   - 401/403 unreadable, cut, not JSON   -> 'unreadable' (never a refusal);
+//   - 401/403 unreadable, cut, not JSON   -> 'denied' (never a refusal);
 //   - 429                                 -> 'rate_limited' (+ Retry-After);
 //   - 400/404                             -> 'bad_request' (the station code);
+//   - 404 + the fault of the gateway      -> 'api_moved' (the API address);
 //   - 5xx, network, timeout, too large    -> transient, read again later.
 // No error message carries the key, the body, nor any text of the answer but
 // the code of a gateway fault (checked: letters, digits, dots).
@@ -158,7 +159,7 @@ export async function fetchBoard(
   if (status === 401 || status === 403) {
     const fault = faultCode(parseJson(text));
     // Only a fault of the gateway says the key was looked at and refused.
-    throw new DarwinError(fault ? 'refused' : 'unreadable', { status, fault });
+    throw new DarwinError(fault ? 'refused' : 'denied', { status, fault });
   }
   if (status === 429) {
     throw new DarwinError('rate_limited', {
@@ -170,7 +171,9 @@ export async function fetchBoard(
     });
   }
   if (status === 400 || status === 404) {
-    throw new DarwinError('bad_request', { status, fault: faultCode(parseJson(text)) });
+    const fault = faultCode(parseJson(text));
+    // A 404 of the gateway itself: the address of the product, not the station.
+    throw new DarwinError(status === 404 && fault ? 'api_moved' : 'bad_request', { status, fault });
   }
   if (status >= 500) {
     throw new DarwinError('server', { status });

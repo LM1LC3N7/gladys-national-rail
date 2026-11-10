@@ -17,7 +17,9 @@ test('midnight: 23:58 read at 00:03 is yesterday, 00:10 read at 23:55 tomorrow',
   assert.equal(instantOf('23:58', justAfter), utc(2026, 10, 10, 23, 58));
   const justBefore = utc(2026, 10, 10, 23, 55);
   assert.equal(instantOf('00:10', justBefore), utc(2026, 10, 11, 0, 10));
-  assert.equal(instantOf('12:00', utc(2026, 10, 10, 23, 59)), utc(2026, 10, 10, 12, 0));
+  // A past time weighs double: 16:00 read at 23:59 is today, 12:00 tomorrow.
+  assert.equal(instantOf('16:00', utc(2026, 10, 10, 23, 59)), utc(2026, 10, 10, 16, 0));
+  assert.equal(instantOf('12:00', utc(2026, 10, 10, 23, 59)), utc(2026, 10, 11, 12, 0));
 });
 
 test('midnight in summer: London is an hour ahead of UTC', () => {
@@ -48,4 +50,19 @@ test('not a time: null; minutes rounded down, never below 0', () => {
   assert.equal(instantOf('10:00', NaN), null);
   assert.equal(minutesUntil(10 * MIN - 1, 0), 9);
   assert.equal(minutesUntil(0, MIN), 0);
+});
+
+test('the hour repeated in autumn: the reading nearest to the board, a past one counting double', () => {
+  // 25 October 2026: 01:00-02:00 comes twice (BST 00:00-01:00 UTC, then GMT 01:00-02:00 UTC).
+  const second = utc(2026, 9, 25, 1, 20); // 01:20 GMT, second pass
+  assert.equal(instantOf('01:50', second), utc(2026, 9, 25, 1, 50));
+  assert.equal(instantOf('02:05', second), utc(2026, 9, 25, 2, 5));
+  const first = utc(2026, 9, 25, 0, 20); // 01:20 BST, first pass
+  assert.equal(instantOf('01:50', first), utc(2026, 9, 25, 0, 50));
+  // Expected times placed near the scheduled one.
+  const std = instantOf('01:50', second);
+  assert.equal((instantOf('01:55', std) - std) / MIN, 5);
+  assert.equal((instantOf('02:05', std) - std) / MIN, 15);
+  // A train just gone in the first pass, read in the second.
+  assert.equal(instantOf('01:58', utc(2026, 9, 25, 1, 0)), utc(2026, 9, 25, 0, 58));
 });

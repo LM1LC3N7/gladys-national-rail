@@ -55,7 +55,7 @@ test('the request: the board URL, the key in x-apikey, JSON asked, the own User-
   assert.equal(boardUrl(DEFAULT_API_URL, { from: 'PAD', to: null }).includes('filterCrs'), false);
 });
 
-test('401/403: refused only with the fault of the gateway; unreadable otherwise', async () => {
+test('401/403: refused only with the fault of the gateway; denied (not a refusal) otherwise', async () => {
   assert.equal(await codeOf(call(() => fault(401)).run), 'refused');
   assert.equal(
     await codeOf(call(() => fault(403, 'keymanagement.service.app_not_approved')).run),
@@ -63,16 +63,13 @@ test('401/403: refused only with the fault of the gateway; unreadable otherwise'
   );
   assert.equal(
     await codeOf(call(() => new Response('<html>denied</html>', { status: 403 })).run),
-    'unreadable',
+    'denied',
   );
   assert.equal(
     await codeOf(call(() => json({ fault: { detail: { errorcode: 'bad code!' } } }, 401)).run),
-    'unreadable',
+    'denied',
   );
-  assert.equal(
-    await codeOf(call(() => new Response('{"fault":', { status: 401 })).run),
-    'unreadable',
-  );
+  assert.equal(await codeOf(call(() => new Response('{"fault":', { status: 401 })).run), 'denied');
   assert.equal(
     faultCode({ fault: { detail: { errorcode: 'oauth.v2.InvalidApiKey' } } }),
     'oauth.v2.InvalidApiKey',
@@ -91,6 +88,10 @@ test('429 with Retry-After (seconds, or a date against the Date header); 400/404
   assert.equal(retryAfterSeconds(undefined), null);
   assert.equal(await codeOf(call(() => json({}, 400)).run), 'bad_request');
   assert.equal(await codeOf(call(() => json({}, 404)).run), 'bad_request');
+  assert.equal(
+    await codeOf(call(() => fault(404, 'messaging.adaptors.http.flow.ApplicationNotFound')).run),
+    'api_moved',
+  );
   assert.equal(await codeOf(call(() => json({}, 503)).run), 'server');
   assert.equal(await codeOf(call(() => json({}, 302)).run), 'unreadable');
   assert.equal(

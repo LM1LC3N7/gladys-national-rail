@@ -32,6 +32,8 @@ export const WORDS = {
     platform: (platform) => `platform ${platform}`,
     noTrain: 'No train in the next two hours',
     noMessage: 'No disruption message',
+    unreadableMessage: 'A disruption message is there, but its text could not be read',
+    noRecent: 'No recent data (see the status of the integration)',
     station: 'station',
   },
   fr: {
@@ -44,6 +46,8 @@ export const WORDS = {
     platform: (platform) => `voie ${platform}`,
     noTrain: 'Aucun train dans les deux prochaines heures',
     noMessage: 'Aucun message de perturbation',
+    unreadableMessage: 'Un message de perturbation est là, mais son texte n’a pas pu être lu',
+    noRecent: 'Pas de données récentes (voir le statut de l’intégration)',
     station: 'gare',
   },
 };
@@ -95,6 +99,10 @@ export const STATUS = {
       `The Rail Data Marketplace asked to slow down: reads paused until ${at} (UK time).`,
       `Le Rail Data Marketplace a demandé de ralentir : lectures en pause jusqu’à ${at} (heure britannique).`,
     ),
+  storeUnwritable: both(
+    '/data cannot be written: the pace and the pauses are not kept across a restart.',
+    '/data n’est pas inscriptible : la cadence et les pauses ne sont pas gardées au redémarrage.',
+  ),
   storeUnreadable: both(
     '/data cannot be read: the pauses and the refused key are kept in memory only.',
     '/data ne peut pas être lu : les pauses et la clé refusée sont gardées en mémoire seulement.',
@@ -122,7 +130,30 @@ export const BOARD_ERRORS = {
   network: both('the service could not be reached', 'le service est injoignable'),
   too_large: both('answer too large, not read', 'réponse trop grande, non lue'),
   unreadable: both('answer not understood', 'réponse incomprise'),
+  denied: both(
+    'access denied without the usual answer of the Rail Data Marketplace',
+    'accès refusé sans la réponse habituelle du Rail Data Marketplace',
+  ),
+  api_moved: both(
+    'the Rail Data Marketplace does not know this API address (out of date? see “API address”)',
+    'le Rail Data Marketplace ne connaît pas cette adresse d’API (périmée ? voir « Adresse de l’API »)',
+  ),
+  unavailable: both(
+    'Darwin gives no train information for this station now',
+    'Darwin ne donne pas d’information sur les trains de cette gare pour le moment',
+  ),
 };
+
+/** Why one board was not read, with the HTTP code and the message of Darwin when known. */
+export function boardError(code, status = null, detail = null) {
+  const reason = BOARD_ERRORS[code] ?? BOARD_ERRORS.unreadable;
+  const http =
+    status && ['denied', 'server', 'unreadable', 'bad_request'].includes(code)
+      ? ` (HTTP ${status})`
+      : '';
+  const said = detail ? ` — “${detail}”` : '';
+  return { en: `${reason.en}${http}${said}`, fr: `${reason.fr}${http}${said}` };
+}
 
 export const TEST = {
   noKey: STATUS.noKey,
@@ -138,6 +169,11 @@ export const TEST = {
     both(
       `It works: ${station}, ${count} departure(s) in the next two hours.`,
       `Ça fonctionne : ${station}, ${count} départ(s) dans les deux prochaines heures.`,
+    ),
+  recent: (reason) =>
+    both(
+      `Read less than an interval ago, and it failed: ${reason.en}. Try again later.`,
+      `Lu il y a moins d’un intervalle, sans succès : ${reason.fr}. Réessayez plus tard.`,
     ),
   failed: (reason) => both(`The read failed: ${reason.en}.`, `La lecture a échoué : ${reason.fr}.`),
 };

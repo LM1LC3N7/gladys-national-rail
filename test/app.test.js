@@ -420,13 +420,21 @@ test('no read while Gladys is disconnected; unchanged states not sent again; rec
 
 test('scene events: each threshold once per train, cancelled once, kept across a restart, bounded', async (t) => {
   const store = createMemoryStore();
-  const late = (minutes) => () =>
-    board({
-      services: [
-        service({ inMin: 5, etd: `18:${String(5 + minutes).padStart(2, '0')}`, id: 'late-1' }),
-        service({ inMin: 20, etd: 'Cancelled', id: 'gone-1', cancelReason: 'a signalling fault' }),
-      ],
-    });
+  const late =
+    (minutes) =>
+    ({ at }) =>
+      board({
+        at,
+        services: [
+          service({ inMin: 5, etd: `18:${String(5 + minutes).padStart(2, '0')}`, id: 'late-1' }),
+          service({
+            inMin: 20,
+            etd: 'Cancelled',
+            id: 'gone-1',
+            cancelReason: 'a signalling fault',
+          }),
+        ],
+      });
   const env = await setup({ store, connect: false });
   env.net.world = late(12);
   await env.gladys.connect();
@@ -587,4 +595,182 @@ test('stop: no timer left, no request after it', async () => {
   await env.wait(HOUR);
   assert.equal(env.net.count(), count);
   assert.ok(env.app instanceof App);
+});
+
+// --- Review r1 ---------------------------------------------------------------
+
+test('r1 I2: Darwin without services for the station: unknown, never "no train"', async (t) => {
+  const env = await setup();
+  t.after(() => env.app.stop());
+  assert.equal(env.gladys.fake.lastState(F('PAD', 'departure_1')), 10);
+  env.net.world = ({ at }) => ({
+    ...board({ at, services: [], messages: ['<p>Train information is unavailable.</p>'] }),
+    areServicesAvailable: false,
+    trainServices: null,
+  });
+  await env.wait(2 * MINUTE + SECOND);
+  assert.notEqual(env.gladys.fake.lastState(F('PAD', 'departure_1')), 999);
+  assert.notEqual(env.gladys.fake.lastState(F('PAD', 'summary')), 'No train in the next two hours');
+  assert.match(
+    text(env),
+    /Darwin gives no train information for this station now — “Train information is unavailable\.”/,
+  );
+});
+
+test('r1 I3: the countdown counts from when the board was served (Date), an old copy refused', async (t) => {
+  const env = await setup({ connect: false });
+  t.after(() => env.app.stop());
+  // Served now, generated 3 min before: the train of now + 20 min is in 20 min.
+  env.net.world = ({ at }) =>
+    json({ ...board({ at: at - 3 * MINUTE, services: [service({ at, inMin: 20 })] }) }, 200, {
+      date: new Date(at).toUTCString(),
+    });
+  await env.gladys.connect();
+  await env.wait(0);
+  assert.equal(env.gladys.fake.lastState(F('PAD', 'departure_1')), 20);
+  // Generated 10 min before it was served: not used.
+  env.net.world = ({ at }) =>
+    json({ ...board({ at: at - 10 * MINUTE, services: [service({ at, inMin: 5 })] }) }, 200, {
+      date: new Date(at).toUTCString(),
+    });
+  await env.wait(2 * MINUTE + SECOND);
+  assert.notEqual(env.gladys.fake.lastState(F('PAD', 'departure_1')), 5);
+  assert.match(text(env), /answer not understood/);
+});
+
+test('r1 I4: one request at a time, whoever asks (loop, button, scene, six boards)', async (t) => {
+  const config = { api_key: KEY, boards: 'AAA, BBB, CCC, DDD, EEE, FFF', read_interval: 60 };
+  const env = await setup({ config, connect: false });
+  t.after(() => env.app.stop());
+  let open = 0;
+  let peak = 0;
+  env.net.world = async ({ at, crs }) => {
+    open += 1;
+    peak = Math.max(peak, open);
+    await new Promise((resolve) => setTimeout(resolve, 5));
+    open -= 1;
+    return board({ at, crs });
+  };
+  await env.gladys.connect();
+  const jobs = [
+    env.gladys.fake.action('test_connection'),
+    env.gladys.fake.sceneAction('get_next_departures', { board: D('BBB') }),
+    env.gladys.fake.sceneAction('get_next_departures', { board: D('CCC') }),
+  ];
+  for (let i = 0; i < 30; i += 1) {
+    await new Promise((resolve) => setTimeout(resolve, 3));
+    await env.wait(0);
+  }
+  await Promise.all(jobs);
+  await env.wait(61 * SECOND);
+  for (let i = 0; i < 30; i += 1) {
+    await new Promise((resolve) => setTimeout(resolve, 3));
+    await env.wait(0);
+  }
+  assert.ok(env.net.count() >= 12, `${env.net.count()} requests`);
+  assert.equal(peak, 1);
+});
+
+test('r1 I4: the scene action never answers from a reading older than 15 min', async (t) => {
+  const env = await setup();
+  t.after(() => env.app.stop());
+  env.net.world = () => json({}, 503);
+  await env.wait(20 * MINUTE);
+  const ack = await env.gladys.fake.sceneAction('get_next_departures', { board: D('PAD') });
+  assert.equal(ack.success, false);
+  assert.match(ack.error, /No fresh departures/);
+});
+
+test('r1 I4: a key changed while the attempt is being saved: that read never leaves', async (t) => {
+  const store = createMemoryStore();
+  const env = await setup({ store, connect: false });
+  t.after(() => env.app.stop());
+  const realSave = store.save;
+  let release;
+  let held = 0;
+  store.save = (data) => {
+    held += 1;
+    if (held === 1) return new Promise((resolve) => (release = () => resolve(realSave(data))));
+    return realSave(data);
+  };
+  await env.gladys.connect();
+  await env.wait(0);
+  assert.equal(typeof release, 'function', 'the first save is held');
+  assert.equal(env.net.count(), 0);
+  await env.gladys.fake.configUpdated({ ...CONFIG, api_key: 'NewKey1234567890' });
+  release();
+  await env.wait(0);
+  // The overtaken read never left; the board is read once, at once, with the new key.
+  assert.equal(env.net.count('PAD'), 1);
+  assert.ok(env.net.calls.every((c) => c.init.headers['x-apikey'] === 'NewKey1234567890'));
+  assert.equal(env.net.count('RDG'), 1);
+});
+
+test('r1 M1: the test button never reads again within the interval after a failure', async (t) => {
+  const env = await setup();
+  t.after(() => env.app.stop());
+  env.net.world = () => json({}, 503);
+  await env.wait(2 * MINUTE + SECOND);
+  const count = env.net.count('PAD');
+  await env.wait(31 * SECOND);
+  const ack = await env.gladys.fake.action('test_connection');
+  assert.match(
+    said(ack),
+    /Read less than an interval ago, and it failed: the service answered with an error \(HTTP 503\)/,
+  );
+  assert.equal(env.net.count('PAD'), count);
+});
+
+test('r1 M3: a new key reads at once the boards that failed with the old one', async (t) => {
+  const env = await setup();
+  t.after(() => env.app.stop());
+  env.net.world = () => new Response('denied', { status: 401 });
+  await env.wait(20 * MINUTE);
+  const count = env.net.count();
+  env.net.world = () => undefined;
+  await env.gladys.fake.configUpdated({ ...CONFIG, api_key: 'NewKey1234567890' });
+  await env.wait(0);
+  assert.equal(env.net.count(), count + 2);
+  assert.match(text(env), /Connected: 2 board/);
+});
+
+test('r1 M4: after 15 min without a good read, the texts say there is no recent data', async (t) => {
+  const env = await setup();
+  t.after(() => env.app.stop());
+  env.net.world = () => json({}, 500);
+  await env.wait(10 * MINUTE);
+  assert.match(env.gladys.fake.lastState(F('PAD', 'summary')), /Reading/);
+  await env.wait(30 * MINUTE);
+  assert.equal(
+    env.gladys.fake.lastState(F('PAD', 'summary')),
+    'No recent data (see the status of the integration)',
+  );
+  assert.equal(
+    env.gladys.fake.lastState(F('PAD', 'departure_1_info')),
+    'No recent data (see the status of the integration)',
+  );
+});
+
+test('r1 M6: messages there but unreadable: said so, never "no message"', async (t) => {
+  const env = await setup({ connect: false });
+  t.after(() => env.app.stop());
+  env.net.world = ({ at }) => ({ ...board({ at }), nrccMessages: [{ xhtmlMessage: '<p>x</p>' }] });
+  await env.gladys.connect();
+  await env.wait(0);
+  assert.equal(
+    env.gladys.fake.lastState(F('PAD', 'messages')),
+    'A disruption message is there, but its text could not be read',
+  );
+  assert.ok(env.lines.some((l) => /disruption messages present/.test(l)));
+});
+
+test('r1 M7: /data not writable: told in the status', async (t) => {
+  const store = createMemoryStore();
+  store.failSave = true;
+  const env = await setup({ store });
+  t.after(() => env.app.stop());
+  assert.match(text(env), /\/data cannot be written/);
+  store.failSave = false;
+  await env.wait(2 * MINUTE + SECOND);
+  assert.doesNotMatch(text(env), /\/data cannot be written/);
 });

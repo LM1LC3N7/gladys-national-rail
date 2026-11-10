@@ -8,7 +8,7 @@
   {
     "name": "refusal without the fault of the gateway",
     "file": "src/darwin.js",
-    "from": "throw new DarwinError(fault ? 'refused' : 'unreadable', { status, fault });",
+    "from": "throw new DarwinError(fault ? 'refused' : 'denied', { status, fault });",
     "to": "throw new DarwinError('refused', { status, fault });"
   },
   {
@@ -80,13 +80,13 @@
   {
     "name": "late answer of an old key accepted (success)",
     "file": "src/app.js",
-    "from": "      if (generation !== this.generation) {\n        return { ok: false, code: 'stale' };\n      }\n      const reading",
+    "from": "      if (generation !== this.generation) {\n        return overtaken();\n      }\n      const reading",
     "to": "      const reading"
   },
   {
     "name": "late answer of an old key accepted (failure)",
     "file": "src/app.js",
-    "from": "      if (generation !== this.generation) {\n        return { ok: false, code: 'stale' };\n      }\n      return this.failed",
+    "from": "      if (generation !== this.generation) {\n        return overtaken();\n      }\n      return this.failed",
     "to": "      return this.failed"
   },
   {
@@ -122,8 +122,8 @@
   {
     "name": "test button: reads even when just read",
     "file": "src/app.js",
-    "from": "      mono - rt.attemptMono < this.interval()\n    ) {",
-    "to": "      false\n    ) {"
+    "from": "if (!this.refused && rt.attemptMono !== null && mono - rt.attemptMono < this.interval()) {",
+    "to": "if (false) {"
   },
   {
     "name": "scene event: thresholds fired again",
@@ -164,8 +164,8 @@
   {
     "name": "an old board used",
     "file": "src/board.js",
-    "from": "dated - generated > STALE_AFTER",
-    "to": "false"
+    "from": "dated - generated > MAX_BOARD_LAG) {",
+    "to": "false) {"
   },
   {
     "name": "body not bounded while streamed",
@@ -250,5 +250,89 @@
     "file": "src/app.js",
     "from": "      this.refused = null;\n      this.pause = null;\n      this.saveSoon();",
     "to": "      this.pause = null;\n      this.saveSoon();"
+  },
+  {
+    "name": "r1: no read queue (several requests at once)",
+    "file": "src/app.js",
+    "from": "const job = this.chain.then(async () => {",
+    "to": "const job = Promise.resolve().then(async () => {"
+  },
+  {
+    "name": "r1: scene action answers from an old reading",
+    "file": "src/app.js",
+    "from": "if (!rt.reading || this.monotonic() - rt.readingMono > STALE_AFTER) {",
+    "to": "if (!rt.reading) {"
+  },
+  {
+    "name": "r1: generation not checked after the save",
+    "file": "src/app.js",
+    "from": "    await this.save();\n    if (generation !== this.generation) {\n      return overtaken();\n    }\n",
+    "to": "    await this.save();\n"
+  },
+  {
+    "name": "r1 I1: always the first reading of a repeated hour",
+    "file": "src/time.js",
+    "from": "    for (const candidate of candidates) {",
+    "to": "    for (const candidate of candidates.slice(0, 1)) {"
+  },
+  {
+    "name": "r1 I1: a past time weighs as a future one",
+    "file": "src/time.js",
+    "from": "const score = gap >= 0 ? gap : -2 * gap;",
+    "to": "const score = Math.abs(gap);"
+  },
+  {
+    "name": "r1 I2: areServicesAvailable ignored",
+    "file": "src/board.js",
+    "from": "if (json.areServicesAvailable === false) {",
+    "to": "if (false) {"
+  },
+  {
+    "name": "r1 I3: generatedAt as the clock of the board",
+    "file": "src/board.js",
+    "from": "const reference = Number.isFinite(dated) ? dated : Number.isFinite(generated) ? generated : now;",
+    "to": "const reference = Number.isFinite(generated) ? generated : Number.isFinite(dated) ? dated : now;"
+  },
+  {
+    "name": "r1 I3: an old copy accepted up to 15 min",
+    "file": "src/board.js",
+    "from": "dated - generated > MAX_BOARD_LAG) {",
+    "to": "dated - generated > 15 * 60_000) {"
+  },
+  {
+    "name": "r1 M1: the button reads again after a failure",
+    "file": "src/app.js",
+    "from": "if (!this.refused && rt.attemptMono !== null && mono - rt.attemptMono < this.interval()) {",
+    "to": "if (!this.refused && rt.lastError === null && rt.attemptMono !== null && mono - rt.attemptMono < this.interval()) {"
+  },
+  {
+    "name": "r1 M3: a new key waits for the backoff",
+    "file": "src/app.js",
+    "from": "          rt.nextDue = -Infinity;\n",
+    "to": ""
+  },
+  {
+    "name": "r1 M4: no 'no recent data'",
+    "file": "src/app.js",
+    "from": "    this.markStale(board, rt).catch(() => {});\n",
+    "to": ""
+  },
+  {
+    "name": "r1 M6: unreadable messages told as none",
+    "file": "src/board.js",
+    "from": "    messages.length === 0 && listOf(json.nrccMessages, 'message').length > 0;",
+    "to": "    false;"
+  },
+  {
+    "name": "r1 M7: /data not writable not told",
+    "file": "src/app.js",
+    "from": "    else if (this.saveFailed) notes.push(STATUS.storeUnwritable);\n",
+    "to": ""
+  },
+  {
+    "name": "r1 M8: a 404 of the gateway told as an unknown station",
+    "file": "src/darwin.js",
+    "from": "status === 404 && fault ? 'api_moved' : 'bad_request'",
+    "to": "'bad_request'"
   }
 ]

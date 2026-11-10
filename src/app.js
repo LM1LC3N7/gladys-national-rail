@@ -48,8 +48,16 @@ import {
 } from './constants.js';
 import { DarwinError, fetchBoard } from './darwin.js';
 import { parseBoard, STALE_AFTER } from './board.js';
-import { buildDevice, idsOf, serviceText, statesOf, summaryText, upcoming } from './devices.js';
-import { BOARD_ERRORS, SCENE_ERRORS, STATUS, TEST } from './i18n.js';
+import {
+  buildDevice,
+  FEATURE,
+  idsOf,
+  serviceText,
+  statesOf,
+  summaryText,
+  upcoming,
+} from './devices.js';
+import { boardError, SCENE_ERRORS, STATUS, TEST, WORDS } from './i18n.js';
 import { createFileStore } from './store.js';
 import { londonTime } from './time.js';
 
@@ -142,6 +150,7 @@ export class App {
     this.lastStatus = null;
     this.lastTest = null;
     this.connectSeq = 0;
+    this.saveFailed = false;
     this.configTimer = null;
   }
 
@@ -262,6 +271,16 @@ export class App {
         this.logger.info('The key changed: the refusal is lifted');
         this.refused = null;
         this.saveSoon();
+      }
+      // A new key is tried at once on the boards that failed with the old one
+      // (the read queue keeps one request at a time).
+      for (const rt of this.boards.values()) {
+        if (rt.failures > 0 || rt.lastError) {
+          rt.failures = 0;
+          rt.lastError = null;
+          rt.lastDetail = null;
+          rt.nextDue = -Infinity;
+        }
       }
     } else if (next.apiUrl !== previous.apiUrl) {
       this.generation += 1;
@@ -441,14 +460,17 @@ export class App {
     }
     let timer;
     try {
-      return await Promise.race([
+      const saved = await Promise.race([
         this.store.save(this.snapshot()).then(() => true),
         new Promise((resolve) => {
           timer = this.timers.setTimeout(() => resolve(false), SAVE_WAIT);
         }),
       ]);
+      this.saveFailed = !saved;
+      return saved;
     } catch (err) {
       this.logger.warn(`/data not written: ${err?.message ?? err}`);
+      this.saveFailed = true;
       return false;
     } finally {
       this.timers.clearTimeout(timer);
@@ -481,6 +503,9 @@ export class App {
         nextDue: -Infinity,
         failures: 0,
         lastError: null,
+        lastStatus: null,
+        lastDetail: null,
+        staleShown: false,
         attemptMono: null,
         reading: null,
         readingMono: null,
@@ -598,13 +623,19 @@ export class App {
     }
     const rt = this.runtime(board.id);
     rt.attemptMono = mono;
+    // A read overtaken by a new key or API address: the board is read again
+    // at once under the new configuration (the queue keeps one at a time).
+    const overtaken = () => {
+      rt.nextDue = -Infinity;
+      return { ok: false, code: 'stale' };
+    };
     rt.nextDue = mono + this.waitAfter(rt.failures);
     const attemptAt = this.now();
     this.kept[board.id] = { at: attemptAt, failures: rt.failures };
     // The attempt is in /data before the request: a restart never reads sooner.
     await this.save();
     if (generation !== this.generation) {
-      return { ok: false, code: 'stale' };
+      return overtaken();
     }
     const again = this.monotonic();
     const still = this.blockedAt(again);
@@ -626,13 +657,19 @@ export class App {
         board,
       );
       if (generation !== this.generation) {
-        return { ok: false, code: 'stale' };
+        return overtaken();
       }
       const reading = parseBoard(json, { date, now: this.now() });
+      if (reading.unreadableMessages) {
+        this.logger.warn(`Board ${board.id}: disruption messages present, their text not read`);
+      }
       rt.reading = reading;
       rt.readingMono = this.monotonic();
       rt.failures = 0;
       rt.lastError = null;
+      rt.lastStatus = null;
+      rt.lastDetail = null;
+      rt.staleShown = false;
       rt.nextDue = mono + this.interval();
       this.kept[board.id] = { at: attemptAt, failures: 0 };
       if (this.refused) {
@@ -649,7 +686,7 @@ export class App {
       return { ok: true, reading };
     } catch (err) {
       if (generation !== this.generation) {
-        return { ok: false, code: 'stale' };
+        return overtaken();
       }
       return this.failed(board, rt, err, mono);
     } finally {
@@ -666,6 +703,7 @@ export class App {
     const code = typeof err?.code === 'string' ? err.code : 'unreadable';
     const status = err instanceof DarwinError ? err.status : null;
     this.logger.warn(`Board ${board.id}: ${err instanceof Error ? err.message : code}`);
+    this.markStale(board, rt).catch(() => {});
     if (code === 'refused') {
       const salt = this.random(16).toString('hex');
       this.refused = {
@@ -689,6 +727,8 @@ export class App {
     }
     rt.failures = Math.min(20, rt.failures + 1);
     rt.lastError = code;
+    rt.lastStatus = status;
+    rt.lastDetail = typeof err?.detail === 'string' && err.detail ? err.detail : null;
     rt.nextDue = mono + this.waitAfter(rt.failures);
     this.kept[board.id] = { at: this.kept[board.id]?.at ?? this.now(), failures: rt.failures };
     this.saveSoon();
@@ -700,6 +740,34 @@ export class App {
   /** The clock of a reading: its generation instant plus the time elapsed since it arrived. */
   sourceNow(rt) {
     return rt.reading.generatedAt + (this.monotonic() - rt.readingMono);
+  }
+
+  /**
+   * No good read for STALE_AFTER: the texts say so (the countdowns cannot be
+   * unpublished; their date in Gladys tells their age). Once per outage.
+   */
+  async markStale(board, rt) {
+    if (
+      !rt.reading ||
+      rt.staleShown ||
+      this.monotonic() - rt.readingMono <= STALE_AFTER ||
+      !this.isCreated(board) ||
+      !this.linked
+    ) {
+      return;
+    }
+    rt.staleShown = true;
+    const ids = idsOf(this.gladys, board);
+    const text = WORDS[this.config.language].noRecent;
+    const states = [{ device_feature_external_id: ids.feature(FEATURE.summary), text }];
+    for (let rank = 1; rank <= this.config.maxDepartures; rank += 1) {
+      states.push({ device_feature_external_id: ids.feature(FEATURE.info(rank)), text });
+    }
+    try {
+      await this.gladys.publishChangedStates(states);
+    } catch (err) {
+      this.logger.warn(`Board ${board.id}: states not published (${err?.message ?? err})`);
+    }
   }
 
   async publishBoard(board) {
@@ -842,6 +910,7 @@ export class App {
     if (config.invalidBoards.length > 0) notes.push(STATUS.invalidBoards(config.invalidBoards));
     if (config.tooManyBoards) notes.push(STATUS.tooManyBoards(config.boards.length));
     if (this.storeState === 'memory') notes.push(STATUS.storeUnreadable);
+    else if (this.saveFailed) notes.push(STATUS.storeUnwritable);
     const result = (connected, first) => ({ connected, message: join([first, ...notes]) });
 
     if (config.keyState === 'missing') return result(false, STATUS.noKey);
@@ -859,7 +928,7 @@ export class App {
     for (const board of created) {
       const rt = this.runtime(board.id);
       if (rt.lastError) {
-        const reason = BOARD_ERRORS[rt.lastError] ?? BOARD_ERRORS.unreadable;
+        const reason = boardError(rt.lastError, rt.lastStatus, rt.lastDetail);
         const label = rt.reading?.station ?? board.from;
         errors.push({ en: `${label}: ${reason.en}.`, fr: `${label} : ${reason.fr}.` });
       } else if (rt.reading) {
@@ -929,15 +998,13 @@ export class App {
     const board = config.boards[0];
     const rt = this.runtime(board.id);
     let outcome;
-    if (
-      !this.refused &&
-      rt.reading &&
-      rt.lastError === null &&
-      rt.attemptMono !== null &&
-      mono - rt.attemptMono < this.interval()
-    ) {
-      // Read less than an interval ago: its result, without a request.
-      outcome = { ok: true, reading: rt.reading };
+    if (!this.refused && rt.attemptMono !== null && mono - rt.attemptMono < this.interval()) {
+      // Read less than an interval ago: its result, without a request (a
+      // refused key excepted: the button is the way to try it again).
+      outcome =
+        rt.reading && rt.lastError === null
+          ? { ok: true, reading: rt.reading }
+          : { ok: false, code: 'recent', reason: rt.lastError };
     } else {
       if (this.storeState === 'pending') return TEST.busy;
       outcome = await this.queued(() => this.readBoard(board, { force: true }), TEST_BUDGET);
@@ -969,8 +1036,14 @@ export class App {
         return TEST.busy;
       case 'key':
         return TEST.invalidKey;
+      case 'recent': {
+        const rt = this.runtime(board.id);
+        return TEST.recent(boardError(outcome.reason, rt.lastStatus, rt.lastDetail));
+      }
       default:
-        return TEST.failed(BOARD_ERRORS[outcome.code] ?? BOARD_ERRORS.unreadable);
+        return TEST.failed(
+          boardError(outcome.code, outcome.status, this.runtime(board.id).lastDetail),
+        );
     }
   }
 

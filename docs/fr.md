@@ -35,7 +35,7 @@ Exemple : `PAD, RDG>PAD:Train du travail`.
 
 Enregistrez, puis ouvrez l’onglet **Découverte** et ajoutez les tableaux. Seuls les tableaux ajoutés comme
 appareils sont lus d’eux-mêmes. Le bouton **Tester la connexion** lit le premier tableau (au plus une fois toutes les
-30 s ; un tableau lu depuis moins d’un intervalle répond d’après cette lecture).
+30 s ; un tableau lu depuis moins d’un intervalle répond d’après cette lecture, même en échec).
 
 ## Appareils
 
@@ -53,8 +53,11 @@ Et pour tout le tableau :
 - **Messages de perturbation** : les messages National Rail de la gare, sans leur HTML.
 
 Un train supprimé, ou un train que Darwin dit seulement « Delayed » sans heure, n’a pas de compte à rebours :
-il est indiqué dans le texte du tableau, sans heure inventée. Les heures sont celles du Royaume-Uni (GMT en
-hiver, BST en été), changements d’heure et minuit compris. Aucune fonctionnalité ne garde d’historique.
+il est indiqué dans le texte du tableau, sans heure inventée. Les bus de remplacement ne sont pas affichés :
+Darwin les liste à part, et cette version ne lit que les trains. Les heures sont celles du Royaume-Uni (GMT en
+hiver, BST en été), changements d’heure et minuit compris (dans l’heure répétée d’octobre, la lecture la plus proche du
+tableau est retenue). Les comptes à rebours partent de l’heure où le tableau a été servi (le `Date` de la
+réponse). Aucune fonctionnalité ne garde d’historique.
 
 ## Scènes
 
@@ -84,10 +87,17 @@ minute au plus sont envoyés, les autres aux lectures suivantes.
   doublée à chaque fois, entre 1 min et 6 h ; la pause est gardée dans `/data`.
 - **Un tableau en échec** (erreur du serveur, pas de réponse en 10 s, code de gare inconnu) : il est relu de
   plus en plus tard (l’intervalle doublé, jusqu’à 1 h) ; les autres tableaux continuent.
-- Les réponses de plus de 1 Mo sont coupées avant d’être lues, et un tableau produit plus de 15 min avant
+- Les réponses de plus de 1 Mo sont coupées avant d’être lues, et un tableau produit plus de 5 min avant
   d’être servi n’est pas utilisé.
+- Darwin sans information sur les trains de la gare (`areServicesAvailable: false`) : rien n’est publié, le
+  statut le dit avec le message National Rail ; jamais « aucun train ».
+- Après 15 min sans bonne lecture d’un tableau, ses textes disent « Pas de données récentes » (Gladys ne sait
+  pas retirer un compte à rebours : sa date dans Gladys dit son âge).
+- Un 404 de la passerelle elle-même (pas d’une gare) indique que l’adresse de l’API est peut-être périmée.
+- Enregistrer une nouvelle clé relit aussitôt les tableaux en échec avec l’ancienne.
 - `/data` illisible : jamais écrasé ; l’intégration le relit toutes les 10 s et, en 30 s au plus, continue
-  avec les pauses et le refus en mémoire (le statut le dit).
+  avec les pauses et le refus en mémoire (le statut le dit). Un `/data` non inscriptible est signalé dans le
+  statut aussi (la cadence n’est alors pas gardée au redémarrage).
 
 ## Vie privée
 

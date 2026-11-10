@@ -19,10 +19,16 @@ import { MINUTE } from './constants.js';
 import { instantOf } from './time.js';
 
 export class BoardError extends Error {
-  constructor(message) {
+  /**
+   * @param {string} message
+   * @param {{ code?: string, detail?: string }} [options] `detail`: a cleaned
+   *   text of the service (an NRCC message), shown in the status
+   */
+  constructor(message, { code = 'unreadable', detail = '' } = {}) {
     super(message);
     this.name = 'BoardError';
-    this.code = 'unreadable';
+    this.code = code;
+    this.detail = detail;
   }
 }
 
@@ -30,7 +36,9 @@ export class BoardError extends Error {
 const CONTROL = /[\u0000-\u001f\u007f-\u009f\u2028\u2029]+/g;
 const MAX_SERVICES = 20;
 const MAX_MESSAGES = 5;
-/** A board served more than this after it was generated is not used. */
+/** A board served more than this after it was generated is an old copy: not used. */
+export const MAX_BOARD_LAG = 5 * MINUTE;
+/** The last reading of a board is not used past this age (scene action, texts). */
 export const STALE_AFTER = 15 * MINUTE;
 
 /** A clean single-line text of at most `max` characters, or '' (never another type). */
@@ -144,7 +152,8 @@ export function parseService(raw, reference) {
 }
 
 /**
- * The board: `{ generatedAt, station, filter, services, messages }`, the
+ * The board: `{ generatedAt, station, filter, services, messages, unreadableMessages }`
+ * (`generatedAt`: the clock of the board, see below), the
  * services in the order of the board (by scheduled time).
  * @param {object} json
  * @param {{ date?: string | null, now: number }} context the Date header, the wall clock
@@ -160,20 +169,33 @@ export function parseBoard(json, { date = null, now }) {
   }
   const generated = Date.parse(typeof json.generatedAt === 'string' ? json.generatedAt : '');
   const dated = Date.parse(date ?? '');
-  // A board generated long before it was served is an old copy: no countdown
-  // is computed from it.
-  if (Number.isFinite(generated) && Number.isFinite(dated) && dated - generated > STALE_AFTER) {
+  // A board generated long before it was served is an old copy (a cache on
+  // the way): its expected times are old too.
+  if (Number.isFinite(generated) && Number.isFinite(dated) && dated - generated > MAX_BOARD_LAG) {
     throw new BoardError('an old board');
   }
-  const reference = Number.isFinite(generated) ? generated : Number.isFinite(dated) ? dated : now;
+  const messages = listOf(json.nrccMessages, 'message')
+    .slice(0, MAX_MESSAGES)
+    .map(messageText)
+    .filter(Boolean);
+  // Messages there, none readable: said so, never "no message".
+  const unreadableMessages =
+    messages.length === 0 && listOf(json.nrccMessages, 'message').length > 0;
+  // Darwin says it has no train information for the station now: unknown,
+  // never "no train".
+  if (json.areServicesAvailable === false) {
+    throw new BoardError('services not available', {
+      code: 'unavailable',
+      detail: cleanText(messages[0] ?? '', 150),
+    });
+  }
+  // The clock of the board: when it was served (the Date header), else when
+  // it was generated, else the wall clock.
+  const reference = Number.isFinite(dated) ? dated : Number.isFinite(generated) ? generated : now;
   const services = listOf(json.trainServices, 'service')
     .slice(0, MAX_SERVICES)
     .filter((raw) => raw && typeof raw === 'object')
     .map((raw) => parseService(raw, reference))
-    .filter(Boolean);
-  const messages = listOf(json.nrccMessages, 'message')
-    .slice(0, MAX_MESSAGES)
-    .map(messageText)
     .filter(Boolean);
   return {
     generatedAt: reference,
@@ -181,5 +203,6 @@ export function parseBoard(json, { date = null, now }) {
     filter: cleanText(json.filterLocationName, 60) || null,
     services,
     messages,
+    unreadableMessages,
   };
 }

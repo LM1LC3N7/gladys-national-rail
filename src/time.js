@@ -59,8 +59,30 @@ export function londonInstant(y, m, d, h, min) {
 const HHMM = /^([01]\d|2[0-3]):([0-5]\d)$/;
 
 /**
+ * Every instant at which the London wall clock reads h:min on the London
+ * date of `instant` (none in the hour skipped in spring, two in the hour
+ * repeated in autumn).
+ */
+export function londonInstants(y, m, d, h, min) {
+  const asUtc = Date.UTC(y, m - 1, d, h, min);
+  const found = new Set();
+  for (const probe of [asUtc - 3 * HOUR, asUtc + 3 * HOUR]) {
+    const candidate = asUtc - londonOffset(probe);
+    const p = londonParts(candidate);
+    if (p.h === h && p.min === min && p.d === d) {
+      found.add(candidate);
+    }
+  }
+  return [...found].sort((a, b) => a - b);
+}
+
+/**
  * The instant of a Darwin "HH:MM" nearest to `reference` (an instant, ms),
- * or null when the text is not a time.
+ * or null when the text is not a time. Every candidate is weighed, the day
+ * before, the day and the day after, both readings of the hour repeated in
+ * autumn included: the nearest wins, a past one counting double (a board
+ * lists the trains to come; a train late, not one early). In the hour skipped
+ * in spring, the time is read with the offset before the change.
  */
 export function instantOf(text, reference) {
   const match = typeof text === 'string' ? HHMM.exec(text.trim()) : null;
@@ -69,18 +91,24 @@ export function instantOf(text, reference) {
   }
   const h = Number(match[1]);
   const min = Number(match[2]);
-  const day = londonParts(reference);
-  const today = londonInstant(day.y, day.m, day.d, h, min);
-  const gap = today - reference;
-  if (gap < -12 * HOUR) {
-    const next = londonParts(reference + 24 * HOUR);
-    return londonInstant(next.y, next.m, next.d, h, min);
+  let best = null;
+  let bestScore = Infinity;
+  for (const shift of [-24 * HOUR, 0, 24 * HOUR]) {
+    const day = londonParts(reference + shift);
+    const candidates = londonInstants(day.y, day.m, day.d, h, min);
+    if (candidates.length === 0) {
+      candidates.push(londonInstant(day.y, day.m, day.d, h, min));
+    }
+    for (const candidate of candidates) {
+      const gap = candidate - reference;
+      const score = gap >= 0 ? gap : -2 * gap;
+      if (score < bestScore) {
+        best = candidate;
+        bestScore = score;
+      }
+    }
   }
-  if (gap > 12 * HOUR) {
-    const previous = londonParts(reference - 24 * HOUR);
-    return londonInstant(previous.y, previous.m, previous.d, h, min);
-  }
-  return today;
+  return best;
 }
 
 /** Whole minutes from `from` to `to`, rounded down, never below 0. */

@@ -23,6 +23,7 @@
 
 - Check the JSON of the RDM product with a real key (field names, `nrccMessages` shape, error codes for an
   unknown station: 400, 404 or 500?).
+- Replacement buses (`busServices`) and ferries, shown apart.
 - A dashboard widget of the next trains.
 - Station search by name (the CRS list of NaPTAN, OGL) instead of typing the code.
 - Arrivals board, and the OpenLDBWS SOAP service for the users who still hold a token.

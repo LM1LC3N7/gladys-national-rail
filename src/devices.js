@@ -182,7 +182,9 @@ export function statesOf(gladys, board, config, reading, sourceNow) {
     text:
       reading.messages.length > 0
         ? cleanText(reading.messages.join(' | '), MAX_TEXT)
-        : WORDS[config.language].noMessage,
+        : reading.unreadableMessages
+          ? WORDS[config.language].unreadableMessage
+          : WORDS[config.language].noMessage,
   });
   return states;
 }

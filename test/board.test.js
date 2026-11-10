@@ -68,8 +68,30 @@ test('late across midnight: 23:50 expected 00:20 is 30 min late', () => {
   assert.equal(upcoming(reading, at)[0].minutes, 35);
   // The expected time is placed near the scheduled one, not near the board:
   // even read far from it, 23:50 expected 00:20 stays 30 min late.
-  const far = parseService({ std: '23:50', etd: '00:20' }, Date.UTC(2026, 10, 10, 12, 5));
+  const far = parseService({ std: '23:50', etd: '00:20' }, Date.UTC(2026, 10, 10, 8, 0));
   assert.equal(far.delay, 30);
+});
+
+test('the night of the change to winter time: no made-up delay, the train counted', () => {
+  const at = Date.UTC(2026, 9, 25, 1, 20); // 01:20 GMT, the second 01:20 of the night
+  const reading = parseBoard(
+    board({
+      at,
+      services: [
+        { std: '01:50', etd: '02:05', serviceID: 'a', destination: [] },
+        { std: '01:50', etd: 'On time', serviceID: 'b', destination: [] },
+      ],
+    }),
+    { now: at },
+  );
+  assert.deepEqual(
+    reading.services.map((s) => s.delay),
+    [15, 0],
+  );
+  assert.deepEqual(
+    upcoming(reading, at).map((s) => s.minutes),
+    [30, 45],
+  );
 });
 
 test('lists wrapped or single, every text cleaned; HTML of the messages removed', () => {
