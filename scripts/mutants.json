@@ -1,0 +1,254 @@
+[
+  {
+    "name": "refused key: automatic reads not stopped",
+    "file": "src/app.js",
+    "from": "    if (this.refused) return 'refused';\n",
+    "to": ""
+  },
+  {
+    "name": "refusal without the fault of the gateway",
+    "file": "src/darwin.js",
+    "from": "throw new DarwinError(fault ? 'refused' : 'unreadable', { status, fault });",
+    "to": "throw new DarwinError('refused', { status, fault });"
+  },
+  {
+    "name": "a new key does not lift the refusal",
+    "file": "src/app.js",
+    "from": "if (this.refused && !this.refusalMatches(next.apiKey)) {",
+    "to": "if (false) {"
+  },
+  {
+    "name": "refusal from /data not restored",
+    "file": "src/app.js",
+    "from": "        this.refused = candidate;\n",
+    "to": ""
+  },
+  {
+    "name": "refusal from /data kept under another key",
+    "file": "src/app.js",
+    "from": "if (!this.config.apiKey || tagOf(candidate.salt, this.config.apiKey) === candidate.tag) {",
+    "to": "if (true) {"
+  },
+  {
+    "name": "the key in /data",
+    "file": "src/app.js",
+    "from": "? { salt: this.refused.salt, tag: this.refused.tag, status: this.refused.status }",
+    "to": "? this.refused"
+  },
+  {
+    "name": "429 pause not honoured",
+    "file": "src/app.js",
+    "from": "    if (this.pausedAt(mono)) return 'paused';\n",
+    "to": ""
+  },
+  {
+    "name": "429 pause unbounded",
+    "file": "src/app.js",
+    "from": "Math.min(PAUSE_MAX, Math.max(PAUSE_MIN, seconds * 1000))",
+    "to": "seconds * 1000"
+  },
+  {
+    "name": "429 pause not restored from /data",
+    "file": "src/app.js",
+    "from": "        this.pause = { until: now + left, due: mono + left, count: pause.count };\n",
+    "to": ""
+  },
+  {
+    "name": "attempt not saved before the request",
+    "file": "src/app.js",
+    "from": "    // The attempt is in /data before the request: a restart never reads sooner.\n    await this.save();\n",
+    "to": ""
+  },
+  {
+    "name": "restored attempt does not delay the reads",
+    "file": "src/app.js",
+    "from": "rt.nextDue = mono + Math.min(wait, Math.max(0, entry.at + wait - now));",
+    "to": "rt.nextDue = mono;"
+  },
+  {
+    "name": "a future date in /data accepted",
+    "file": "src/app.js",
+    "from": "          entry.at > now + MINUTE ||\n          !Number.isInteger(entry.failures) ||",
+    "to": "          !Number.isInteger(entry.failures) ||"
+  },
+  {
+    "name": "no backoff for a failing board",
+    "file": "src/app.js",
+    "from": "    rt.nextDue = mono + this.waitAfter(rt.failures);\n    this.kept[board.id] = { at: this.kept[board.id]?.at",
+    "to": "    rt.nextDue = mono + this.interval() / 4;\n    this.kept[board.id] = { at: this.kept[board.id]?.at"
+  },
+  {
+    "name": "late answer of an old key accepted (success)",
+    "file": "src/app.js",
+    "from": "      if (generation !== this.generation) {\n        return { ok: false, code: 'stale' };\n      }\n      const reading",
+    "to": "      const reading"
+  },
+  {
+    "name": "late answer of an old key accepted (failure)",
+    "file": "src/app.js",
+    "from": "      if (generation !== this.generation) {\n        return { ok: false, code: 'stale' };\n      }\n      return this.failed",
+    "to": "      return this.failed"
+  },
+  {
+    "name": "/data written over while unreadable",
+    "file": "src/app.js",
+    "from": "    if (this.storeState !== 'ok') {\n      return false;",
+    "to": "    if (false) {\n      return false;"
+  },
+  {
+    "name": "no memory mode after failed loads",
+    "file": "src/app.js",
+    "from": "this.storeState === 'pending' && this.loadFailures >= STORE_LOADS_BEFORE_MEMORY",
+    "to": "false"
+  },
+  {
+    "name": "no memory mode when /data never answers",
+    "file": "src/app.js",
+    "from": "        this.storeState = 'memory';\n        this.schedule();",
+    "to": "        this.schedule();"
+  },
+  {
+    "name": "save not bounded",
+    "file": "src/app.js",
+    "from": "          timer = this.timers.setTimeout(() => resolve(false), SAVE_WAIT);\n",
+    "to": ""
+  },
+  {
+    "name": "test button: no spacing",
+    "file": "src/app.js",
+    "from": "if (this.lastTest && mono - this.lastTest.mono < TEST_SPACING) {",
+    "to": "if (false) {"
+  },
+  {
+    "name": "test button: reads even when just read",
+    "file": "src/app.js",
+    "from": "      mono - rt.attemptMono < this.interval()\n    ) {",
+    "to": "      false\n    ) {"
+  },
+  {
+    "name": "scene event: thresholds fired again",
+    "file": "src/app.js",
+    "from": "service.delay >= threshold && !entry.delays.includes(threshold)",
+    "to": "service.delay >= threshold"
+  },
+  {
+    "name": "scene event: cancelled fired again",
+    "file": "src/app.js",
+    "from": "service.status === 'cancelled' && !entry.cancelled",
+    "to": "service.status === 'cancelled'"
+  },
+  {
+    "name": "scene events: no rate cap",
+    "file": "src/app.js",
+    "from": "return this.events.length < MAX_EVENTS_PER_MINUTE;",
+    "to": "return true;"
+  },
+  {
+    "name": "fired events not restored from /data",
+    "file": "src/app.js",
+    "from": "        this.fired.set(key, {\n",
+    "to": "        new Map().set(key, {\n"
+  },
+  {
+    "name": "reads while Gladys is disconnected",
+    "file": "src/app.js",
+    "from": "if (!this.running || !this.linked) return 'stopped';",
+    "to": "if (!this.running) return 'stopped';"
+  },
+  {
+    "name": "boards read without their device",
+    "file": "src/app.js",
+    "from": "if (this.isCreated(board) && rt.nextDue <= mono",
+    "to": "if (rt.nextDue <= mono"
+  },
+  {
+    "name": "an old board used",
+    "file": "src/board.js",
+    "from": "dated - generated > STALE_AFTER",
+    "to": "false"
+  },
+  {
+    "name": "body not bounded while streamed",
+    "file": "src/darwin.js",
+    "from": "    if (size > max) {",
+    "to": "    if (false) {"
+  },
+  {
+    "name": "body not bounded by its declared length",
+    "file": "src/darwin.js",
+    "from": "if (Number.isFinite(declared) && declared > max) {",
+    "to": "if (false) {"
+  },
+  {
+    "name": "key sent to any host",
+    "file": "src/config.js",
+    "from": "      !API_HOST.test(url.hostname) ||\n",
+    "to": ""
+  },
+  {
+    "name": "a train without time made delayed 0",
+    "file": "src/board.js",
+    "from": "  } else if (/^delayed$/i.test(etd)) {\n    status = 'delayed';\n  } else {",
+    "to": "  } else if (/^delayed$/i.test(etd)) {\n    status = 'on_time';\n    expectedAt = scheduledAt;\n    delay = 0;\n  } else {"
+  },
+  {
+    "name": "isCancelled ignored",
+    "file": "src/board.js",
+    "from": "if (raw.isCancelled === true || /^cancel+ed$/i.test(etd)) {",
+    "to": "if (/^cancel+ed$/i.test(etd)) {"
+  },
+  {
+    "name": "getConfig failure in connected not retried",
+    "file": "src/app.js",
+    "from": "        this.lastStatus = null;\n        await new Promise((resolve) => {",
+    "to": "        this.lastStatus = null;\n        if (seq) return;\n        await new Promise((resolve) => {"
+  },
+  {
+    "name": "countdown not moving with the time",
+    "file": "src/app.js",
+    "from": "return rt.reading.generatedAt + (this.monotonic() - rt.readingMono);",
+    "to": "return rt.reading.generatedAt;"
+  },
+  {
+    "name": "a status sent again unchanged",
+    "file": "src/app.js",
+    "from": "if (!force && key === this.lastStatus) {",
+    "to": "if (false) {"
+  },
+  {
+    "name": "Retry-After ignored",
+    "file": "src/app.js",
+    "from": "const seconds = err.retryAfter ?? 60 * 2 ** (count - 1);",
+    "to": "const seconds = 60 * 2 ** (count - 1);"
+  },
+  {
+    "name": "delay across midnight",
+    "file": "src/board.js",
+    "from": "const expected = instantOf(etd, scheduledAt);",
+    "to": "const expected = at;"
+  },
+  {
+    "name": "no train is 0, not 999",
+    "file": "src/devices.js",
+    "from": "state: train ? train.minutes : NO_TRAIN_MINUTES,",
+    "to": "state: train ? train.minutes : 0,"
+  },
+  {
+    "name": "scene action outputs 0 without a train",
+    "file": "src/app.js",
+    "from": "delay: first ? first.delay : null,",
+    "to": "delay: first ? first.delay : 0,"
+  },
+  {
+    "name": "CR/LF accepted in the key",
+    "file": "src/config.js",
+    "from": "const KEY = /^[A-Za-z0-9._~+/=-]{8,128}$/;",
+    "to": "const KEY = /^[^ ]{8,128}$/;"
+  },
+  {
+    "name": "refusal lifted on success not done",
+    "file": "src/app.js",
+    "from": "      this.refused = null;\n      this.pause = null;\n      this.saveSoon();",
+    "to": "      this.pause = null;\n      this.saveSoon();"
+  }
+]

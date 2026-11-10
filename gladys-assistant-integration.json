@@ -1,177 +1,498 @@
 {
   "manifest_version": 1,
   "type": "device",
-  "name": "Demo Devices Template",
+  "name": "National Rail",
   "description": {
-    "en": "Starter template showing sensors, a switch, a dimmable light and a smart plug.",
-    "fr": "Template de démarrage : capteurs, interrupteur, lampe variable et prise connectée."
+    "en": "Live departures, delays and cancellations of British trains (National Rail Darwin).",
+    "fr": "Départs, retards et suppressions des trains britanniques en direct (National Rail Darwin)."
   },
-  "version": "1.0.0",
-  "docker_image": "ghcr.io/gladysassistant/integration-template-js:1.0.0",
+  "version": "0.1.0",
+  "docker_image": "ghcr.io/lm1lc3n7/gladys-national-rail:0.1.0",
   "gladys_version": ">=5.1.0",
-  "cover_image": "https://raw.githubusercontent.com/GladysAssistant/integration-template-js/master/cover.png",
-  "categories": ["lighting", "security", "environment"],
-  "transports": ["local", "cloud"],
+  "cover_image": "https://raw.githubusercontent.com/LM1LC3N7/gladys-national-rail/main/cover.png",
+  "categories": ["transport"],
+  "transports": ["cloud"],
   "config_schema": [
     {
       "key": "intro",
       "type": "section",
-      "label": { "en": "Getting started", "fr": "Pour commencer" },
+      "label": {
+        "en": "Get started",
+        "fr": "Démarrer"
+      },
       "description": {
-        "en": "The demo weather station reads real data from the free Open-Meteo API: pick the coordinates to observe. No account, no API key.",
-        "fr": "La station météo de démonstration lit de vraies données via l'API gratuite Open-Meteo : choisissez les coordonnées à observer. Pas de compte, pas de clé d'API."
+        "en": "1. Create a free account on the Rail Data Marketplace, subscribe to the free “Live Departure Board” product and copy its consumer key. 2. Paste it below and type your stations. 3. Save, then add the boards from the “Discover” tab. Unofficial integration, not affiliated with National Rail nor the Rail Delivery Group; data: National Rail Enquiries (Darwin). Never tested with a real key: written from the official documentation.",
+        "fr": "1. Créez un compte gratuit sur le Rail Data Marketplace, abonnez-vous au produit gratuit « Live Departure Board » et copiez sa clé « consumer key ». 2. Collez-la ci-dessous et tapez vos gares. 3. Enregistrez, puis ajoutez les tableaux depuis l’onglet « Découverte ». Intégration non officielle, sans lien avec National Rail ni le Rail Delivery Group ; données : National Rail Enquiries (Darwin). Jamais testé avec une vraie clé : écrit d’après la documentation officielle."
       },
       "links": [
         {
-          "url": "https://open-meteo.com/en/docs",
-          "label": { "en": "Open-Meteo documentation", "fr": "Documentation Open-Meteo" }
+          "url": "https://github.com/LM1LC3N7/gladys-national-rail/blob/main/docs/en.md",
+          "label": {
+            "en": "Step-by-step guide",
+            "fr": "Guide pas à pas"
+          }
+        },
+        {
+          "url": "https://raildata.org.uk/",
+          "label": {
+            "en": "Rail Data Marketplace",
+            "fr": "Rail Data Marketplace"
+          }
         }
       ]
     },
     {
-      "key": "latitude",
-      "type": "number",
-      "label": { "en": "Latitude", "fr": "Latitude" },
-      "description": {
-        "en": "Latitude used for the demo weather sensor.",
-        "fr": "Latitude utilisée par le capteur météo de démonstration."
+      "key": "api_key",
+      "type": "secret",
+      "label": {
+        "en": "Consumer key",
+        "fr": "Clé (consumer key)"
       },
-      "placeholder": { "en": "e.g. 48.8566", "fr": "ex. 48.8566" },
-      "required": true,
-      "default": 48.8566,
-      "min": -90,
-      "max": 90
+      "description": {
+        "en": "The consumer key of your “Live Departure Board” subscription. Kept by Gladys in its database, never shown again, sent only to the Rail Data Marketplace.",
+        "fr": "La clé « consumer key » de votre abonnement « Live Departure Board ». Gardée par Gladys dans sa base, jamais réaffichée, envoyée seulement au Rail Data Marketplace."
+      },
+      "required": true
     },
     {
-      "key": "longitude",
-      "type": "number",
-      "label": { "en": "Longitude", "fr": "Longitude" },
-      "description": {
-        "en": "Longitude used for the demo weather sensor.",
-        "fr": "Longitude utilisée par le capteur météo de démonstration."
+      "key": "boards",
+      "type": "string",
+      "label": {
+        "en": "Boards",
+        "fr": "Tableaux"
       },
-      "placeholder": { "en": "e.g. 2.3522", "fr": "ex. 2.3522" },
+      "description": {
+        "en": "Station codes (three letters, shown on every station page of nationalrail.co.uk), separated by commas. Only the trains calling at a second station: add > and its code. A name for the device: add : and the name. Up to 6 boards.",
+        "fr": "Codes de gare (trois lettres, indiqués sur chaque page de gare de nationalrail.co.uk), séparés par des virgules. Seulement les trains qui desservent une seconde gare : ajoutez > et son code. Un nom pour l’appareil : ajoutez : et le nom. 6 tableaux au plus."
+      },
       "required": true,
-      "default": 2.3522,
-      "min": -180,
-      "max": 180
+      "placeholder": {
+        "en": "PAD, RDG>PAD:Train to work",
+        "fr": "PAD, RDG>PAD:Train du travail"
+      }
     },
     {
-      "key": "unit",
-      "type": "select",
-      "label": { "en": "Temperature unit", "fr": "Unité de température" },
+      "key": "advanced",
+      "type": "section",
+      "label": {
+        "en": "Advanced",
+        "fr": "Avancé"
+      },
+      "description": {
+        "en": "The defaults suit almost everyone. Each board is one request per interval.",
+        "fr": "Les valeurs par défaut conviennent à presque tout le monde. Chaque tableau coûte une requête par intervalle."
+      }
+    },
+    {
+      "key": "read_interval",
+      "type": "number",
+      "label": {
+        "en": "Refresh interval (s)",
+        "fr": "Rafraîchissement (s)"
+      },
+      "description": {
+        "en": "How often each board is read, in seconds.",
+        "fr": "Fréquence de lecture de chaque tableau, en secondes."
+      },
       "required": false,
-      "default": "celsius",
+      "default": 120,
+      "min": 60,
+      "max": 3600
+    },
+    {
+      "key": "max_departures",
+      "type": "number",
+      "label": {
+        "en": "Trains per board",
+        "fr": "Trains par tableau"
+      },
+      "description": {
+        "en": "How many upcoming trains each board exposes as features.",
+        "fr": "Nombre de prochains trains exposés en fonctionnalités par tableau."
+      },
+      "required": false,
+      "default": 3,
+      "min": 1,
+      "max": 5
+    },
+    {
+      "key": "language",
+      "type": "select",
+      "label": {
+        "en": "Language of the values",
+        "fr": "Langue des valeurs"
+      },
+      "description": {
+        "en": "Language of the feature names and of the texts published.",
+        "fr": "Langue des noms de fonctionnalités et des textes publiés."
+      },
+      "required": false,
+      "default": "en",
       "options": [
-        { "value": "celsius", "label": { "en": "Celsius", "fr": "Celsius" } },
-        { "value": "fahrenheit", "label": { "en": "Fahrenheit", "fr": "Fahrenheit" } }
+        {
+          "value": "en",
+          "label": {
+            "en": "English",
+            "fr": "Anglais"
+          }
+        },
+        {
+          "value": "fr",
+          "label": {
+            "en": "French",
+            "fr": "Français"
+          }
+        }
       ]
     },
     {
-      "key": "poll_frequency",
-      "type": "number",
-      "label": { "en": "Refresh interval (s)", "fr": "Intervalle de rafraîchissement (s)" },
+      "key": "api_url",
+      "type": "string",
+      "label": {
+        "en": "API address",
+        "fr": "Adresse de l’API"
+      },
       "description": {
-        "en": "How often sensors are polled, in seconds (one minute minimum).",
-        "fr": "Fréquence d'interrogation des capteurs, en secondes (une minute minimum)."
+        "en": "Change it only if the Rail Data Marketplace moves the product (https, a raildata.org.uk address).",
+        "fr": "À changer seulement si le Rail Data Marketplace déplace le produit (https, une adresse raildata.org.uk)."
       },
       "required": false,
-      "default": 300,
-      "min": 60,
-      "max": 3600
+      "default": "https://api1.raildata.org.uk/1010-live-departure-board-dep1_2/LDBWS/api/20220120"
     }
   ],
   "actions": [
     {
-      "key": "test_weather",
-      "label": { "en": "Test the weather provider", "fr": "Tester le fournisseur météo" },
-      "timeout_seconds": 30
-    },
-    {
-      "key": "identify",
-      "label": { "en": "Identify a device", "fr": "Identifier un appareil" },
-      "fields": [
-        {
-          "key": "device",
-          "type": "select",
-          "source": "devices",
-          "label": { "en": "Device", "fr": "Appareil" },
-          "required": true
-        }
-      ]
+      "key": "test_connection",
+      "label": {
+        "en": "Test the connection",
+        "fr": "Tester la connexion"
+      },
+      "timeout_seconds": 60
     }
   ],
   "scene_triggers": [
     {
-      "key": "motion_detected",
-      "label": { "en": "Motion detected", "fr": "Mouvement détecté" },
+      "key": "train_delayed",
+      "label": {
+        "en": "Train delayed",
+        "fr": "Train en retard"
+      },
       "description": {
-        "en": "A demo motion sensor saw a person or an animal move.",
-        "fr": "Un détecteur de démonstration a vu bouger une personne ou un animal."
+        "en": "A train of a watched board is now late by at least the chosen number of minutes (once per train and threshold).",
+        "fr": "Un train d’un tableau suivi a désormais au moins le nombre de minutes de retard choisi (une fois par train et par seuil)."
       },
       "fields": [
         {
-          "key": "device",
+          "key": "board",
           "type": "select",
           "source": "devices",
-          "label": { "en": "Sensor", "fr": "Détecteur" }
+          "label": {
+            "en": "Board",
+            "fr": "Tableau"
+          }
         },
         {
-          "key": "target",
-          "type": "multi_select",
-          "label": { "en": "What moved", "fr": "Ce qui a bougé" },
+          "key": "threshold",
+          "type": "select",
+          "label": {
+            "en": "Delay of at least",
+            "fr": "Retard d’au moins"
+          },
+          "required": true,
           "options": [
-            { "value": "person", "label": { "en": "Person", "fr": "Personne" } },
-            { "value": "animal", "label": { "en": "Animal", "fr": "Animal" } }
+            {
+              "value": "5",
+              "label": {
+                "en": "5 minutes",
+                "fr": "5 minutes"
+              }
+            },
+            {
+              "value": "10",
+              "label": {
+                "en": "10 minutes",
+                "fr": "10 minutes"
+              }
+            },
+            {
+              "value": "15",
+              "label": {
+                "en": "15 minutes",
+                "fr": "15 minutes"
+              }
+            },
+            {
+              "value": "30",
+              "label": {
+                "en": "30 minutes",
+                "fr": "30 minutes"
+              }
+            }
           ]
         }
       ],
       "variables": [
         {
-          "key": "target",
+          "key": "station",
           "type": "string",
-          "label": { "en": "What moved", "fr": "Ce qui a bougé" }
+          "label": {
+            "en": "Station",
+            "fr": "Gare"
+          }
+        },
+        {
+          "key": "destination",
+          "type": "string",
+          "label": {
+            "en": "Destination",
+            "fr": "Destination"
+          }
+        },
+        {
+          "key": "scheduled",
+          "type": "string",
+          "label": {
+            "en": "Scheduled time",
+            "fr": "Heure prévue"
+          }
+        },
+        {
+          "key": "expected",
+          "type": "string",
+          "label": {
+            "en": "Expected time",
+            "fr": "Heure estimée"
+          }
+        },
+        {
+          "key": "delay",
+          "type": "number",
+          "label": {
+            "en": "Delay (min)",
+            "fr": "Retard (min)"
+          }
+        },
+        {
+          "key": "platform",
+          "type": "string",
+          "label": {
+            "en": "Platform",
+            "fr": "Voie"
+          }
+        },
+        {
+          "key": "operator",
+          "type": "string",
+          "label": {
+            "en": "Operator",
+            "fr": "Exploitant"
+          }
+        },
+        {
+          "key": "reason",
+          "type": "string",
+          "label": {
+            "en": "Reason",
+            "fr": "Motif"
+          }
+        }
+      ]
+    },
+    {
+      "key": "train_cancelled",
+      "label": {
+        "en": "Train cancelled",
+        "fr": "Train supprimé"
+      },
+      "description": {
+        "en": "A train of a watched board is cancelled (once per train).",
+        "fr": "Un train d’un tableau suivi est supprimé (une fois par train)."
+      },
+      "fields": [
+        {
+          "key": "board",
+          "type": "select",
+          "source": "devices",
+          "label": {
+            "en": "Board",
+            "fr": "Tableau"
+          }
+        }
+      ],
+      "variables": [
+        {
+          "key": "station",
+          "type": "string",
+          "label": {
+            "en": "Station",
+            "fr": "Gare"
+          }
+        },
+        {
+          "key": "destination",
+          "type": "string",
+          "label": {
+            "en": "Destination",
+            "fr": "Destination"
+          }
+        },
+        {
+          "key": "scheduled",
+          "type": "string",
+          "label": {
+            "en": "Scheduled time",
+            "fr": "Heure prévue"
+          }
+        },
+        {
+          "key": "expected",
+          "type": "string",
+          "label": {
+            "en": "Expected time",
+            "fr": "Heure estimée"
+          }
+        },
+        {
+          "key": "delay",
+          "type": "number",
+          "label": {
+            "en": "Delay (min)",
+            "fr": "Retard (min)"
+          }
+        },
+        {
+          "key": "platform",
+          "type": "string",
+          "label": {
+            "en": "Platform",
+            "fr": "Voie"
+          }
+        },
+        {
+          "key": "operator",
+          "type": "string",
+          "label": {
+            "en": "Operator",
+            "fr": "Exploitant"
+          }
+        },
+        {
+          "key": "reason",
+          "type": "string",
+          "label": {
+            "en": "Reason",
+            "fr": "Motif"
+          }
         }
       ]
     }
   ],
   "scene_actions": [
     {
-      "key": "identify_device",
-      "label": { "en": "Identify a device", "fr": "Identifier un appareil" },
-      "description": {
-        "en": "Make a device signal itself (the demo light blinks).",
-        "fr": "Fait se signaler un appareil (la lampe de démonstration clignote)."
+      "key": "get_next_departures",
+      "label": {
+        "en": "Read the next trains",
+        "fr": "Lire les prochains trains"
       },
-      "timeout_seconds": 15,
+      "description": {
+        "en": "Reads the next trains of a watched board (read again if the last read is older than the interval).",
+        "fr": "Lit les prochains trains d’un tableau suivi (relu si la dernière lecture date de plus d’un intervalle)."
+      },
+      "timeout_seconds": 30,
       "fields": [
         {
-          "key": "device",
+          "key": "board",
           "type": "select",
           "source": "devices",
-          "label": { "en": "Device", "fr": "Appareil" },
+          "label": {
+            "en": "Board",
+            "fr": "Tableau"
+          },
           "required": true
         }
       ],
       "outputs": [
         {
-          "key": "signalled",
-          "type": "boolean",
-          "label": { "en": "Device signalled", "fr": "Appareil signalé" }
+          "key": "minutes",
+          "type": "number",
+          "label": {
+            "en": "Minutes to the next train",
+            "fr": "Minutes avant le prochain train"
+          }
+        },
+        {
+          "key": "following_minutes",
+          "type": "number",
+          "label": {
+            "en": "Minutes to the following one",
+            "fr": "Minutes avant le suivant"
+          }
+        },
+        {
+          "key": "destination",
+          "type": "string",
+          "label": {
+            "en": "Destination",
+            "fr": "Destination"
+          }
+        },
+        {
+          "key": "scheduled",
+          "type": "string",
+          "label": {
+            "en": "Scheduled time",
+            "fr": "Heure prévue"
+          }
+        },
+        {
+          "key": "expected",
+          "type": "string",
+          "label": {
+            "en": "Expected time",
+            "fr": "Heure estimée"
+          }
+        },
+        {
+          "key": "delay",
+          "type": "number",
+          "label": {
+            "en": "Delay (min)",
+            "fr": "Retard (min)"
+          }
+        },
+        {
+          "key": "platform",
+          "type": "string",
+          "label": {
+            "en": "Platform",
+            "fr": "Voie"
+          }
+        },
+        {
+          "key": "details",
+          "type": "string",
+          "label": {
+            "en": "Next train details",
+            "fr": "Détails du prochain train"
+          }
+        },
+        {
+          "key": "summary",
+          "type": "string",
+          "label": {
+            "en": "Departure board",
+            "fr": "Tableau des départs"
+          }
+        },
+        {
+          "key": "count",
+          "type": "number",
+          "label": {
+            "en": "Upcoming trains",
+            "fr": "Trains à venir"
+          }
         }
       ]
-    }
-  ],
-  "widgets": [
-    {
-      "key": "demo_status",
-      "label": { "en": "Demo status", "fr": "État de la démo" },
-      "description": {
-        "en": "Live temperature and plug power, plug connection and observed location.",
-        "fr": "Température et puissance en direct, connexion de la prise, position observée."
-      },
-      "icon": "activity",
-      "action_timeout_seconds": 15
     }
   ]
 }
