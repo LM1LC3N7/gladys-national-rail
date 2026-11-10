@@ -370,5 +370,65 @@
     "file": "src/time.js",
     "from": "    if (candidates.length === 0) {\n      candidates.push(",
     "to": "    if (false) {\n      candidates.push("
+  },
+  {
+    "name": "r3 Y1 recent(): reading older than the interval still ok",
+    "file": "src/app.js",
+    "from": "      if (rt.reading && at - rt.readingMono < this.interval()) {",
+    "to": "      if (rt.reading) {"
+  },
+  {
+    "name": "r3 Y2 test reads again instead of waiting for the read in flight",
+    "file": "src/app.js",
+    "from": "        () => recent(this.monotonic()) ?? this.readBoard(board, { force: true }),",
+    "to": "        () => this.readBoard(board, { force: true }),"
+  },
+  {
+    "name": "r3 Y3 key change keeps attemptMono",
+    "file": "src/app.js",
+    "from": "        rt.attemptMono = null;\n        rt.nextDue = -Infinity;",
+    "to": "        rt.nextDue = -Infinity;"
+  },
+  {
+    "name": "r3 Y4 stale timer never armed",
+    "file": "src/app.js",
+    "from": "    this.scheduleStale();\n    if (this.tickTimer !== null) {",
+    "to": "    if (this.tickTimer !== null) {"
+  },
+  {
+    "name": "r3 Y5 stale timer not cleared on stop",
+    "file": "src/app.js",
+    "from": "'configTimer', 'staleTimer']) {",
+    "to": "'configTimer']) {"
+  },
+  {
+    "name": "r3 Y6 stale timer re-armed while disconnected",
+    "file": "src/app.js",
+    "from": "    if (!this.running || !this.linked) {\n      return;\n    }\n    let due = Infinity;",
+    "to": "    if (!this.running) {\n      return;\n    }\n    let due = Infinity;"
+  },
+  {
+    "name": "r3 Y7 old board code lost",
+    "file": "src/board.js",
+    "from": "throw new BoardError('an old board', { code: 'old_board' });",
+    "to": "throw new BoardError('an old board');"
+  },
+  {
+    "name": "r3 Y8 stale marker published once per outage broken (staleShown not set)",
+    "file": "src/app.js",
+    "from": "    rt.staleShown = true;\n    const ids",
+    "to": "    const ids"
+  },
+  {
+    "name": "r3 Y9 refused key: test no longer reads",
+    "file": "src/app.js",
+    "from": "      if (this.refused || rt.attemptMono === null || at - rt.attemptMono >= this.interval()) {",
+    "to": "      if (rt.attemptMono === null || at - rt.attemptMono >= this.interval()) {"
+  },
+  {
+    "name": "r3 Y10 stale marker delay 15 -> 0",
+    "file": "src/app.js",
+    "from": "        due = Math.min(due, rt.readingMono + STALE_AFTER);",
+    "to": "        due = Math.min(due, rt.readingMono);"
   }
 ]

@@ -829,3 +829,45 @@ test('r2 N2: "No recent data" also during a 429 pause and with a refused key', a
     await env.app.stop();
   }
 });
+
+// --- Review r3 ---------------------------------------------------------------
+
+test('r3 Y1: a click during a periodic read waits for it; an old reading never says "It works"', async (t) => {
+  const env = await setup();
+  t.after(() => env.app.stop());
+  let release;
+  env.net.world = ({ crs }) =>
+    crs === 'PAD' && !release ? new Promise((resolve) => (release = resolve)) : undefined;
+  await env.wait(2 * MINUTE + SECOND);
+  assert.equal(typeof release, 'function', 'the periodic read is in flight');
+  const click = env.gladys.fake.action('test_connection');
+  await env.flush();
+  env.net.world = () => fault(401);
+  release(fault(401));
+  const ack = await click;
+  assert.match(said(ack), /refused the key/);
+});
+
+test('r3 Y9: with a refused key, the button reads (never answers from a fresh board)', async (t) => {
+  const env = await setup({ connect: false });
+  t.after(() => env.app.stop());
+  env.net.world = ({ crs }) => (crs === 'RDG' ? fault(401) : undefined);
+  await env.gladys.connect();
+  await env.wait(0);
+  assert.ok(env.app.refused, 'refused on the second board');
+  env.net.world = () => fault(401);
+  const count = env.net.count('PAD');
+  const ack = await env.gladys.fake.action('test_connection');
+  assert.match(said(ack), /refused the key/);
+  assert.equal(env.net.count('PAD'), count + 1);
+});
+
+test('r3 Y6: no stale timer while Gladys is disconnected', async (t) => {
+  const env = await setup();
+  t.after(() => env.app.stop());
+  assert.notEqual(env.app.staleTimer, null);
+  env.app.setLinked(false);
+  assert.equal(env.app.staleTimer, null);
+  env.app.setLinked(true);
+  assert.notEqual(env.app.staleTimer, null);
+});

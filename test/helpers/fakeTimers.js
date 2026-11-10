@@ -26,7 +26,16 @@ export function createFakeClock(start) {
   };
   async function advance(ms) {
     const target = clock.now + ms;
-    for (let i = 0; i < 100_000; i += 1) {
+    // A timer that re-arms itself at the same instant would spin forever: a
+    // test fails on it instead of hanging.
+    let sameInstant = 0;
+    let lastAt = null;
+    for (let i = 0; ; i += 1) {
+      // Thousands of timers in one advance: a timer storm (a mutant re-arming
+      // every millisecond), failed rather than spun through.
+      if (i > 20_000) {
+        throw new Error('fake clock: more than 20000 timers in one advance');
+      }
       let next;
       for (const [id, timer] of pending) {
         if (timer.at <= target && (!next || timer.at < next.timer.at)) {
@@ -38,6 +47,11 @@ export function createFakeClock(start) {
       }
       pending.delete(next.id);
       clock.now = Math.max(clock.now, next.timer.at);
+      sameInstant = clock.now === lastAt ? sameInstant + 1 : 0;
+      lastAt = clock.now;
+      if (sameInstant > 1000) {
+        throw new Error('fake clock: more than 1000 timers at the same instant');
+      }
       Promise.resolve()
         .then(() => next.timer.fn())
         .catch(() => {});
