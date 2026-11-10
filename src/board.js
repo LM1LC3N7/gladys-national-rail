@@ -172,7 +172,7 @@ export function parseBoard(json, { date = null, now }) {
   // A board generated long before it was served is an old copy (a cache on
   // the way): its expected times are old too.
   if (Number.isFinite(generated) && Number.isFinite(dated) && dated - generated > MAX_BOARD_LAG) {
-    throw new BoardError('an old board');
+    throw new BoardError('an old board', { code: 'old_board' });
   }
   const messages = listOf(json.nrccMessages, 'message')
     .slice(0, MAX_MESSAGES)

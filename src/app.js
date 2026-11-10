@@ -138,6 +138,7 @@ export class App {
     this.storeTimer = null;
     this.memoryTimer = null;
     this.tickTimer = null;
+    this.staleTimer = null;
     this.pause = null;
     this.refused = null;
     this.boards = new Map();
@@ -177,7 +178,7 @@ export class App {
     this.running = false;
     this.generation += 1;
     this.connectSeq += 1;
-    for (const name of ['tickTimer', 'storeTimer', 'memoryTimer', 'configTimer']) {
+    for (const name of ['tickTimer', 'storeTimer', 'memoryTimer', 'configTimer', 'staleTimer']) {
       if (this[name] !== null) {
         this.timers.clearTimeout(this[name]);
         this[name] = null;
@@ -272,15 +273,16 @@ export class App {
         this.refused = null;
         this.saveSoon();
       }
-      // A new key is tried at once on the boards that failed with the old one
-      // (the read queue keeps one request at a time).
+      // A new key is tried at once on every board, and nothing read with the
+      // old one answers the test button (the read queue keeps one request at
+      // a time).
       for (const rt of this.boards.values()) {
-        if (rt.failures > 0 || rt.lastError) {
-          rt.failures = 0;
-          rt.lastError = null;
-          rt.lastDetail = null;
-          rt.nextDue = -Infinity;
-        }
+        rt.failures = 0;
+        rt.lastError = null;
+        rt.lastStatus = null;
+        rt.lastDetail = null;
+        rt.attemptMono = null;
+        rt.nextDue = -Infinity;
       }
     } else if (next.apiUrl !== previous.apiUrl) {
       this.generation += 1;
@@ -534,7 +536,46 @@ export class App {
     return null;
   }
 
+  /**
+   * The texts of a board say "No recent data" STALE_AFTER after its last good
+   * read, whatever stops the reads (failures, a 429 pause, a refused key):
+   * one timer, at the earliest such instant.
+   */
+  scheduleStale() {
+    if (this.staleTimer !== null) {
+      this.timers.clearTimeout(this.staleTimer);
+      this.staleTimer = null;
+    }
+    // Disconnected: nothing to publish; re-armed by setLinked(true).
+    if (!this.running || !this.linked) {
+      return;
+    }
+    let due = Infinity;
+    for (const board of this.config.boards) {
+      const rt = this.boards.get(board.id);
+      if (rt?.reading && !rt.staleShown && this.isCreated(board)) {
+        due = Math.min(due, rt.readingMono + STALE_AFTER);
+      }
+    }
+    if (due === Infinity) {
+      return;
+    }
+    const mono = this.monotonic();
+    this.staleTimer = this.timers.setTimeout(
+      async () => {
+        this.staleTimer = null;
+        for (const board of this.config.boards) {
+          const rt = this.boards.get(board.id);
+          if (rt) await this.markStale(board, rt).catch(() => {});
+        }
+        this.scheduleStale();
+      },
+      Math.max(0, due - mono) + 1,
+    );
+  }
+
   schedule() {
+    this.scheduleStale();
     if (this.tickTimer !== null) {
       this.timers.clearTimeout(this.tickTimer);
       this.tickTimer = null;
@@ -703,7 +744,6 @@ export class App {
     const code = typeof err?.code === 'string' ? err.code : 'unreadable';
     const status = err instanceof DarwinError ? err.status : null;
     this.logger.warn(`Board ${board.id}: ${err instanceof Error ? err.message : code}`);
-    this.markStale(board, rt).catch(() => {});
     if (code === 'refused') {
       const salt = this.random(16).toString('hex');
       this.refused = {
@@ -998,16 +1038,27 @@ export class App {
     const board = config.boards[0];
     const rt = this.runtime(board.id);
     let outcome;
-    if (!this.refused && rt.attemptMono !== null && mono - rt.attemptMono < this.interval()) {
-      // Read less than an interval ago: its result, without a request (a
-      // refused key excepted: the button is the way to try it again).
-      outcome =
-        rt.reading && rt.lastError === null
-          ? { ok: true, reading: rt.reading }
-          : { ok: false, code: 'recent', reason: rt.lastError };
-    } else {
+    // What a read less than an interval ago says, without a request: its
+    // failure (with its reason), or its board; else null.
+    const recent = (at) => {
+      if (this.refused || rt.attemptMono === null || at - rt.attemptMono >= this.interval()) {
+        return null;
+      }
+      if (rt.lastError) return { ok: false, code: 'recent', reason: rt.lastError };
+      if (rt.reading && at - rt.readingMono < this.interval()) {
+        return { ok: true, reading: rt.reading };
+      }
+      return null;
+    };
+    outcome = recent(mono);
+    if (!outcome) {
       if (this.storeState === 'pending') return TEST.busy;
-      outcome = await this.queued(() => this.readBoard(board, { force: true }), TEST_BUDGET);
+      // Behind a read in flight, if any: its result once it ends, else a read
+      // (a refused key may be tried again from here).
+      outcome = await this.queued(
+        () => recent(this.monotonic()) ?? this.readBoard(board, { force: true }),
+        TEST_BUDGET,
+      );
     }
     const message = this.testMessage(outcome, board);
     if (outcome.code !== 'busy' && outcome.code !== 'stale') {

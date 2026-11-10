@@ -635,7 +635,7 @@ test('r1 I3: the countdown counts from when the board was served (Date), an old 
     });
   await env.wait(2 * MINUTE + SECOND);
   assert.notEqual(env.gladys.fake.lastState(F('PAD', 'departure_1')), 5);
-  assert.match(text(env), /answer not understood/);
+  assert.match(text(env), /the board served was an old copy, read again later/);
 });
 
 test('r1 I4: one request at a time, whoever asks (loop, button, scene, six boards)', async (t) => {
@@ -773,4 +773,59 @@ test('r1 M7: /data not writable: told in the status', async (t) => {
   store.failSave = false;
   await env.wait(2 * MINUTE + SECOND);
   assert.doesNotMatch(text(env), /\/data cannot be written/);
+});
+
+// --- Review r2 ---------------------------------------------------------------
+
+test('r2 N1: a click during the first (slow) read waits for it, never a made-up failure', async (t) => {
+  const env = await setup({ connect: false });
+  t.after(() => env.app.stop());
+  let release;
+  env.net.world = ({ crs }) =>
+    crs === 'PAD' && !release ? new Promise((resolve) => (release = resolve)) : undefined;
+  await env.gladys.connect();
+  await env.wait(0);
+  assert.equal(typeof release, 'function', 'the first read is in flight');
+  const click = env.gladys.fake.action('test_connection');
+  await env.flush();
+  release(json(board({ at: env.clock.now })));
+  const ack = await click;
+  assert.match(said(ack), /It works: London Paddington/);
+  assert.equal(env.net.count('PAD'), 1, 'no second request');
+});
+
+test('r2 N1/N3: a key changed, then a click at once: the new key is read, never the old result', async (t) => {
+  const env = await setup();
+  t.after(() => env.app.stop());
+  assert.match(said(await env.gladys.fake.action('test_connection')), /It works/);
+  env.net.world = ({ init }) =>
+    init.headers['x-apikey'] === 'WrongKey1234567890' ? fault(401) : undefined;
+  await env.wait(31 * SECOND);
+  await env.gladys.fake.configUpdated({ ...CONFIG, api_key: 'WrongKey1234567890' });
+  const ack = await env.gladys.fake.action('test_connection');
+  assert.match(said(ack), /refused the key \(HTTP 401\)/);
+  assert.doesNotMatch(said(ack), /answer not understood|It works/);
+});
+
+test('r2 N2: "No recent data" also during a 429 pause and with a refused key', async (t) => {
+  for (const answer of [() => json({}, 429, { 'retry-after': '7200' }), () => fault(401)]) {
+    const env = await setup();
+    t.after(() => env.app.stop());
+    env.net.world = answer;
+    await env.wait(2 * MINUTE + SECOND);
+    const count = env.net.count();
+    await env.wait(10 * MINUTE);
+    assert.match(env.gladys.fake.lastState(F('PAD', 'summary')), /Reading/);
+    await env.wait(10 * MINUTE);
+    assert.equal(env.net.count(), count, 'no read meanwhile');
+    assert.equal(
+      env.gladys.fake.lastState(F('PAD', 'summary')),
+      'No recent data (see the status of the integration)',
+    );
+    assert.equal(
+      env.gladys.fake.lastState(F('RDG-PAD', 'departure_1_info')),
+      'No recent data (see the status of the integration)',
+    );
+    await env.app.stop();
+  }
 });

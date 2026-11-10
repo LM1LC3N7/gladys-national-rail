@@ -122,8 +122,8 @@
   {
     "name": "test button: reads even when just read",
     "file": "src/app.js",
-    "from": "if (!this.refused && rt.attemptMono !== null && mono - rt.attemptMono < this.interval()) {",
-    "to": "if (false) {"
+    "from": "if (this.refused || rt.attemptMono === null || at - rt.attemptMono >= this.interval()) {\n        return null;",
+    "to": "if (true) {\n        return null;"
   },
   {
     "name": "scene event: thresholds fired again",
@@ -302,20 +302,20 @@
   {
     "name": "r1 M1: the button reads again after a failure",
     "file": "src/app.js",
-    "from": "if (!this.refused && rt.attemptMono !== null && mono - rt.attemptMono < this.interval()) {",
-    "to": "if (!this.refused && rt.lastError === null && rt.attemptMono !== null && mono - rt.attemptMono < this.interval()) {"
+    "from": "      if (rt.lastError) return { ok: false, code: 'recent', reason: rt.lastError };\n",
+    "to": ""
   },
   {
     "name": "r1 M3: a new key waits for the backoff",
     "file": "src/app.js",
-    "from": "          rt.nextDue = -Infinity;\n",
-    "to": ""
+    "from": "        rt.attemptMono = null;\n        rt.nextDue = -Infinity;\n      }",
+    "to": "        rt.attemptMono = null;\n      }"
   },
   {
-    "name": "r1 M4: no 'no recent data'",
+    "name": "r1 M4: no 'no recent data' (a board left out of the stale timer)",
     "file": "src/app.js",
-    "from": "    this.markStale(board, rt).catch(() => {});\n",
-    "to": ""
+    "from": "if (rt?.reading && !rt.staleShown && this.isCreated(board)) {",
+    "to": "if (false) {"
   },
   {
     "name": "r1 M6: unreadable messages told as none",
@@ -334,5 +334,41 @@
     "file": "src/darwin.js",
     "from": "status === 404 && fault ? 'api_moved' : 'bad_request'",
     "to": "'bad_request'"
+  },
+  {
+    "name": "r2 N1: a read in flight told as a failure",
+    "file": "src/app.js",
+    "from": "        return { ok: true, reading: rt.reading };\n      }\n      return null;\n    };",
+    "to": "        return { ok: true, reading: rt.reading };\n      }\n      return { ok: false, code: 'recent', reason: rt.lastError };\n    };"
+  },
+  {
+    "name": "r2 N1: the button reads again behind a read in flight",
+    "file": "src/app.js",
+    "from": "() => recent(this.monotonic()) ?? this.readBoard(board, { force: true }),",
+    "to": "() => this.readBoard(board, { force: true }),"
+  },
+  {
+    "name": "r2 N3: the result of the old key kept",
+    "file": "src/app.js",
+    "from": "        rt.attemptMono = null;\n        rt.nextDue = -Infinity;",
+    "to": "        rt.nextDue = -Infinity;"
+  },
+  {
+    "name": "r2 N2: no stale timer",
+    "file": "src/app.js",
+    "from": "    this.scheduleStale();\n    if (this.tickTimer !== null) {",
+    "to": "    if (this.tickTimer !== null) {"
+  },
+  {
+    "name": "r2 N4: an old board told as not understood",
+    "file": "src/board.js",
+    "from": "{ code: 'old_board' }",
+    "to": "{}"
+  },
+  {
+    "name": "r2 N5: no reading of the hour skipped in spring",
+    "file": "src/time.js",
+    "from": "    if (candidates.length === 0) {\n      candidates.push(",
+    "to": "    if (false) {\n      candidates.push("
   }
 ]

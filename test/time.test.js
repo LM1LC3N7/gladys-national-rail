@@ -66,3 +66,9 @@ test('the hour repeated in autumn: the reading nearest to the board, a past one 
   // A train just gone in the first pass, read in the second.
   assert.equal(instantOf('01:58', utc(2026, 9, 25, 1, 0)), utc(2026, 9, 25, 0, 58));
 });
+
+test('the hour skipped in spring (28 March 2027): read with the offset before the change', () => {
+  // 01:30 does not exist in London that night; Darwin never gives it, but if
+  // it did, it would be 01:30 UTC (02:30 BST).
+  assert.equal(instantOf('01:30', utc(2027, 2, 28, 0, 40)), utc(2027, 2, 28, 1, 30));
+});

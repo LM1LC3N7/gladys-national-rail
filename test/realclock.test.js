@@ -58,6 +58,14 @@ test('real clock: reads at 0, the interval and twice the interval; timers bounde
     requestTimeout: 2000,
   });
   t.after(() => app.stop());
+  // The decisions, not the requests: the latency of a cold fetch (tens of real
+  // ms, times SPEED) would blur the gaps seen by the server.
+  const decided = [];
+  const readBoard = app.readBoard.bind(app);
+  app.readBoard = (...args) => {
+    decided.push(performance.now() * SPEED);
+    return readBoard(...args);
+  };
   await gladys.connect();
   const started = performance.now() * SPEED;
   await app.onConnected();
@@ -73,8 +81,9 @@ test('real clock: reads at 0, the interval and twice the interval; timers bounde
   const at = reads.map((r) => Math.round(r - started));
   assert.equal(reads.length, 3, `reads at ${at}`);
   assert.ok(reads[0] - started < INTERVAL / 2, `the first read at once: ${at}`);
-  for (let i = 1; i < reads.length; i += 1) {
-    const gap = reads[i] - reads[i - 1];
+  assert.equal(decided.length, 3, `decided at ${decided.map((r) => Math.round(r - started))}`);
+  for (let i = 1; i < decided.length; i += 1) {
+    const gap = decided[i] - decided[i - 1];
     assert.ok(gap >= 0.9 * INTERVAL, `never sooner than the interval: ${at}`);
     assert.ok(gap < 1.5 * INTERVAL, `on time: ${at}`);
   }

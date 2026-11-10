@@ -138,6 +138,10 @@ export const BOARD_ERRORS = {
     'the Rail Data Marketplace does not know this API address (out of date? see “API address”)',
     'le Rail Data Marketplace ne connaît pas cette adresse d’API (périmée ? voir « Adresse de l’API »)',
   ),
+  old_board: both(
+    'the board served was an old copy, read again later',
+    'le tableau servi était une ancienne copie, relu plus tard',
+  ),
   unavailable: both(
     'Darwin gives no train information for this station now',
     'Darwin ne donne pas d’information sur les trains de cette gare pour le moment',

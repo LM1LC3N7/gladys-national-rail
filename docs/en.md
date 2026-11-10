@@ -36,7 +36,8 @@ Example: `PAD, RDG>PAD:Train to work`.
 
 Save, then open the **Discover** tab and add the boards. Only the boards added as devices are read on their own. The
 **Test the connection** button reads the first board (at most once every 30 s; a board read less than an
-interval ago is answered from that read, failed or not).
+interval ago is answered from that read, failed or not; a click during a read waits for it; a new key is read at
+once, outside a 429 pause).
 
 ## Devices
 

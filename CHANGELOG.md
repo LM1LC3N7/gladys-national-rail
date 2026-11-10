@@ -26,3 +26,6 @@ the notes of the version's GitHub Release.
   countdown counted from the time the board was served, the test button within the interval, a new key
   reading the failed boards at once, “No recent data” after 15 min, unreadable messages, `/data` not
   writable and an out-of-date API address told.
+- Review r2: the test button waits for a read in flight instead of telling a failure, forgets the result of
+  the old key; “No recent data” also during a 429 pause or with a refused key; an old copy of a board told
+  as such.

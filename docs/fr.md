@@ -35,7 +35,8 @@ Exemple : `PAD, RDG>PAD:Train du travail`.
 
 Enregistrez, puis ouvrez l’onglet **Découverte** et ajoutez les tableaux. Seuls les tableaux ajoutés comme
 appareils sont lus d’eux-mêmes. Le bouton **Tester la connexion** lit le premier tableau (au plus une fois toutes les
-30 s ; un tableau lu depuis moins d’un intervalle répond d’après cette lecture, même en échec).
+30 s ; un tableau lu depuis moins d’un intervalle répond d’après cette lecture, même en échec ; un clic pendant une lecture l’attend ; une nouvelle clé est
+lue aussitôt, hors pause 429).
 
 ## Appareils
 
