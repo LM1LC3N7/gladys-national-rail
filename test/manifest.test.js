@@ -33,7 +33,7 @@ function* texts(node, path = '') {
 test('the store basics; the same semver version in the four places', () => {
   assert.equal(manifest.manifest_version, 1);
   assert.equal(manifest.type, 'device');
-  assert.equal(manifest.gladys_version, '>=5.1.0');
+  assert.equal(manifest.gladys_version, '>=5.3.0');
   const pkg = JSON.parse(read('package.json'));
   const lock = JSON.parse(read('package-lock.json'));
   assert.match(pkg.version, /^\d+\.\d+\.\d+$/);
@@ -49,7 +49,7 @@ test('the store basics; the same semver version in the four places', () => {
   assert.deepEqual(manifest.transports, ['cloud']);
   assert.deepEqual(manifest.categories, ['transport']);
   assert.equal(manifest.keywords, undefined);
-  assert.equal(manifest.countries, undefined);
+  assert.deepEqual(manifest.countries, ['GB']);
   assert.equal(pkg.scripts.test, 'node --test --test-timeout=60000');
   assert.match(pkg.dependencies['@gladysassistant/integration-sdk'], /^\^\d+\.\d+\.\d+$/);
   for (const lang of ['en', 'fr']) {
